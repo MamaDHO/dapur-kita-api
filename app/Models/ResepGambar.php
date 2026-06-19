@@ -13,6 +13,6 @@ class ResepGambar extends Model
     // URL lengkap untuk dikonsumsi Flutter
     public function getUrlAttribute(): string
     {
-        return asset('storage/' . $this->path);
+        return url('/img/' . $this->path);
     }
 }
