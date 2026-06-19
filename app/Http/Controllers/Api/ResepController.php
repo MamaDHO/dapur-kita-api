@@ -108,7 +108,10 @@ class ResepController extends Controller
             'video_url'      => $r->video_url,
             'average_rating' => $r->average_rating,
             'rating_count'   => $r->ratings->count(),
-            'gambars'        => $r->gambars->map(fn($g) => ['id' => $g->id, 'url' => $g->url]),
+            'gambars'        => $r->gambars->map(fn($g) => [
+                'id'  => $g->id,
+                'url' => 'http://127.0.0.1:8000/storage/' . $g->path 
+            ]),
             'bahan'          => $r->bahans->pluck('isi'),
             'langkah'        => $r->langkahs->pluck('isi'),
             'komentars'      => $r->komentars->map(fn($k) => [
