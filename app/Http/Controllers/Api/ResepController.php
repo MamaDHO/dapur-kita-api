@@ -55,9 +55,10 @@ class ResepController extends Controller
             'langkah.*'  => 'required|string',
         ]);
 
-        $resep = Resep::create($request->only(['nama','pembuat','waktu','kesulitan','kategori','video_url']));
+        $resep = Resep::create($request->only(['nama','pembuat','waktu','kesulitan','kategori','video_url']) + [
+            'user_id' => $request->user()->id,   // ← otomatis dari token login
+        ]);
 
-        // Simpan gambar ke storage/app/public/resep
         if ($request->hasFile('gambars')) {
             foreach ($request->file('gambars') as $i => $file) {
                 $path = $file->store('resep', 'public');
@@ -65,15 +66,73 @@ class ResepController extends Controller
             }
         }
 
-        foreach ($request->bahan as $i => $b) {
-            $resep->bahans()->create(['isi' => $b, 'urutan' => $i]);
-        }
-        foreach ($request->langkah as $i => $l) {
-            $resep->langkahs()->create(['isi' => $l, 'urutan' => $i]);
-        }
+        foreach ($request->bahan as $i => $b)   $resep->bahans()->create(['isi' => $b, 'urutan' => $i]);
+        foreach ($request->langkah as $i => $l) $resep->langkahs()->create(['isi' => $l, 'urutan' => $i]);
 
         $resep->load(['gambars', 'bahans', 'langkahs', 'ratings', 'komentars']);
         return response()->json(['status' => 'success', 'data' => $this->formatResep($resep)], 201);
+    }
+
+    // GET /api/resep-saya
+    public function myResep(Request $request)
+    {
+        $reseps = Resep::with(['gambars', 'bahans', 'langkahs', 'ratings', 'komentars'])
+            ->where('user_id', $request->user()->id)
+            ->latest()
+            ->get();
+
+        return response()->json([
+            'status' => 'success',
+            'data'   => $reseps->map(fn($r) => $this->formatResep($r)),
+        ]);
+    }
+
+    // PUT /api/resep/{resep}
+    public function update(Request $request, Resep $resep)
+    {
+        if ($resep->user_id !== $request->user()->id) {
+            return response()->json(['status' => 'error', 'message' => 'Tidak diizinkan.'], 403);
+        }
+
+        $request->validate([
+            'nama'       => 'required|string|max:255',
+            'pembuat'    => 'required|string|max:255',
+            'waktu'      => 'required|string|max:100',
+            'kesulitan'  => 'required|in:Mudah,Menengah,Sulit',
+            'kategori'   => 'required|in:Sarapan,Makan Siang,Makan Malam,Cemilan',
+            'video_url'  => 'nullable|url',
+            'bahan'      => 'required|array|min:1',
+            'bahan.*'    => 'required|string',
+            'langkah'    => 'required|array|min:1',
+            'langkah.*'  => 'required|string',
+        ]);
+
+        $resep->update($request->only(['nama','pembuat','waktu','kesulitan','kategori','video_url']));
+
+        $resep->bahans()->delete();
+        foreach ($request->bahan as $i => $b) $resep->bahans()->create(['isi' => $b, 'urutan' => $i]);
+
+        $resep->langkahs()->delete();
+        foreach ($request->langkah as $i => $l) $resep->langkahs()->create(['isi' => $l, 'urutan' => $i]);
+
+        $resep->load(['gambars', 'bahans', 'langkahs', 'ratings', 'komentars']);
+        return response()->json(['status' => 'success', 'data' => $this->formatResep($resep)]);
+    }
+
+    // DELETE /api/resep/{resep}
+    public function destroy(Request $request, Resep $resep)
+    {
+        if ($resep->user_id !== $request->user()->id) {
+            return response()->json(['status' => 'error', 'message' => 'Tidak diizinkan.'], 403);
+        }
+
+        foreach ($resep->gambars as $gambar) {
+            Storage::disk('public')->delete($gambar->path);
+        }
+
+        $resep->delete(); // cascade hapus gambars/bahans/langkahs/ratings/komentars otomatis
+
+        return response()->json(['status' => 'success', 'message' => 'Resep dihapus.']);
     }
 
     // POST /api/resep/{id}/rating
